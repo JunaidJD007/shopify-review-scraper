@@ -5,6 +5,14 @@ export function extractProviderReviews(networkPayloads) {
 
   for (const payload of networkPayloads) {
     const source = detectSource(payload.url);
+
+    if (source === "yotpo") {
+      for (const review of extractYotpoReviews(payload.body)) {
+        reviews.push(review);
+      }
+      continue;
+    }
+
     const candidates = findReviewLikeObjects(payload.body);
 
     for (const candidate of candidates) {
@@ -14,6 +22,42 @@ export function extractProviderReviews(networkPayloads) {
   }
 
   return reviews;
+}
+
+function extractYotpoReviews(body) {
+  const candidates = Array.isArray(body?.response?.reviews)
+    ? body.response.reviews
+    : Array.isArray(body?.reviews)
+    ? body.reviews
+    : [];
+
+  return candidates
+    .map((candidate) => {
+      const review = objectToReview(candidate, "yotpo");
+      if (!review) return null;
+
+      const author = cleanText(
+        pick(candidate, [
+          "author",
+          "author_name",
+          "display_name",
+          "reviewer_name",
+          "reviewer",
+          "public_reviewer_name",
+          "user_name",
+          "user",
+          "customer_name",
+          "name",
+          "customer",
+        ])
+      );
+
+      return {
+        ...review,
+        author: author || review.author || "",
+      };
+    })
+    .filter(Boolean);
 }
 
 function detectSource(url) {
@@ -104,13 +148,15 @@ function objectToReview(value, source) {
         "author_name",
         "display_name",
         "reviewer_name",
+        "reviewer",
         "public_reviewer_name",
         "user_name",
-      "customer_name",
-      "name",
-      "customer",
-    ])
-  ),
+        "user",
+        "customer_name",
+        "name",
+        "customer",
+      ])
+    ),
     rating: normalizeRating(pick(value, ["rating", "score", "stars", "ratingValue", "review_rating"])),
     date: cleanText(
       pick(value, [
@@ -132,6 +178,11 @@ function pick(object, keys) {
 
     if (typeof value === "object") {
       if (value.name) return value.name;
+      if (value.display_name) return value.display_name;
+      if (value.displayName) return value.displayName;
+      if (value.full_name) return value.full_name;
+      if (value.fullName) return value.fullName;
+      if (value.username) return value.username;
       if (value.first_name || value.last_name) {
         return [value.first_name, value.last_name].filter(Boolean).join(" ");
       }

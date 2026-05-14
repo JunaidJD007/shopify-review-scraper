@@ -34,3 +34,105 @@ test("extracts nested provider review payloads", () => {
     },
   ]);
 });
+
+test("extracts Yotpo review payloads", () => {
+  const reviews = extractProviderReviews([
+    {
+      url: "https://api.yotpo.com/v1/widget/some-app-key/products/12345/reviews.json?page=1",
+      body: {
+        response: {
+          reviews: [
+            {
+              title: "Excellent",
+              content: "Fast shipping and great quality.",
+              user: {
+                display_name: "Mia",
+              },
+              score: 5,
+              created_at: "2026-03-10",
+            },
+          ],
+        },
+      },
+    },
+  ]);
+
+  assert.deepEqual(normalizeReviews(reviews), [
+    {
+      source: "yotpo",
+      rating: 5,
+      title: "Excellent",
+      body: "Fast shipping and great quality.",
+      author: "Mia",
+      date: "2026-03-10",
+    },
+  ]);
+});
+
+test("extracts Yotpo reviewer object names via user.displayName", () => {
+  const reviews = extractProviderReviews([
+    {
+      url: "https://api.yotpo.com/v1/widget/some-app-key/products/12345/reviews.json?page=1",
+      body: {
+        response: {
+          reviews: [
+            {
+              title: "Excellent",
+              content: "Fast shipping and great quality.",
+              user: {
+                displayName: "Mia",
+              },
+              score: 5,
+              created_at: "2026-03-10",
+            },
+          ],
+        },
+      },
+    },
+  ]);
+
+  assert.deepEqual(normalizeReviews(reviews), [
+    {
+      source: "yotpo",
+      rating: 5,
+      title: "Excellent",
+      body: "Fast shipping and great quality.",
+      author: "Mia",
+      date: "2026-03-10",
+    },
+  ]);
+});
+
+test("extracts Yotpo reviewer object names", () => {
+  const reviews = extractProviderReviews([
+    {
+      url: "https://api.yotpo.com/v1/widget/some-app-key/products/12345/reviews.json?page=1",
+      body: {
+        response: {
+          reviews: [
+            {
+              title: "Excellent",
+              content: "Fast shipping and great quality.",
+              reviewer: {
+                display_name: "Mia",
+              },
+              score: 5,
+              created_at: "2026-03-10",
+            },
+          ],
+        },
+      },
+    },
+  ]);
+
+  assert.deepEqual(normalizeReviews(reviews), [
+    {
+      source: "yotpo",
+      rating: 5,
+      title: "Excellent",
+      body: "Fast shipping and great quality.",
+      author: "Mia",
+      date: "2026-03-10",
+    },
+  ]);
+});

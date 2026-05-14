@@ -96,6 +96,11 @@ export async function scrapeProductReviews(productUrl, options = {}) {
 }
 
 async function fetchAdditionalProviderPages(page, networkPayloads, maxReviews) {
+  await fetchJunipPages(page, networkPayloads, maxReviews);
+  await fetchYotpoPages(page, networkPayloads, maxReviews);
+}
+
+async function fetchJunipPages(page, networkPayloads, maxReviews) {
   const junipPayload = networkPayloads.find(
     (payload) =>
       /juniphq\.com\/.+\/reviews/i.test(payload.url) &&
@@ -106,10 +111,10 @@ async function fetchAdditionalProviderPages(page, networkPayloads, maxReviews) {
   if (!junipPayload || junipPayload.body.data.length >= maxReviews) return;
 
   const fetchedPayloads = await page.evaluate(
-    async ({ firstUrl, firstAfter, maxReviews }) => {
+    async ({ firstUrl, firstBody, firstAfter, maxReviews }) => {
       const payloads = [];
       let after = firstAfter;
-      let loaded = 5;
+      let loaded = Array.isArray(firstBody?.data) ? firstBody.data.length : 0;
 
       while (after && loaded < maxReviews) {
         const nextUrl = buildJunipNextUrl(firstUrl, after);
@@ -144,7 +149,91 @@ async function fetchAdditionalProviderPages(page, networkPayloads, maxReviews) {
     },
     {
       firstUrl: junipPayload.url,
+      firstBody: junipPayload.body,
       firstAfter: junipPayload.body.meta.after,
+      maxReviews,
+    }
+  );
+
+  for (const payload of fetchedPayloads) {
+    networkPayloads.push({
+      url: payload.url,
+      contentType: "application/json",
+      body: payload.body,
+    });
+  }
+}
+
+async function fetchYotpoPages(page, networkPayloads, maxReviews) {
+  const yotpoPayload = networkPayloads.find(
+    (payload) =>
+      /yotpo/i.test(payload.url) &&
+      (Array.isArray(payload.body?.response?.reviews) || Array.isArray(payload.body?.reviews))
+  );
+
+  if (!yotpoPayload) return;
+
+  const fetchedPayloads = await page.evaluate(
+    async ({ firstUrl, firstBody, maxReviews }) => {
+      const payloads = [];
+      let loaded = countYotpoReviews(firstBody);
+      let nextPage = getYotpoNextPage(firstBody, firstUrl);
+
+      while (nextPage && loaded < maxReviews) {
+        const nextUrl = buildYotpoNextUrl(firstUrl, nextPage);
+        const response = await fetch(nextUrl);
+        if (!response.ok) break;
+
+        const body = await response.json();
+        const count = countYotpoReviews(body);
+        if (!count) break;
+
+        payloads.push({ url: nextUrl, body });
+        loaded += count;
+        nextPage = getYotpoNextPage(body, nextUrl);
+      }
+
+      return payloads;
+
+      function countYotpoReviews(body) {
+        return Array.isArray(body?.response?.reviews)
+          ? body.response.reviews.length
+          : Array.isArray(body?.reviews)
+          ? body.reviews.length
+          : 0;
+      }
+
+      function getYotpoNextPage(body, url) {
+        if (!body) return null;
+        if (typeof body?.response?.next_page === "number") return body.response.next_page;
+        if (typeof body?.response?.next_page === "string") return Number(body.response.next_page);
+        if (typeof body?.next_page === "number") return body.next_page;
+        if (typeof body?.next_page === "string") return Number(body.next_page);
+
+        const page = Number(body?.response?.page ?? body?.page);
+        const total = Number(body?.response?.total_pages ?? body?.total_pages);
+        if (Number.isFinite(page) && Number.isFinite(total) && page < total) {
+          return page + 1;
+        }
+
+        const params = new URLSearchParams(url.split("?")[1] || "");
+        if (params.has("page")) {
+          return Number(params.get("page")) + 1;
+        }
+
+        return null;
+      }
+
+      function buildYotpoNextUrl(url, page) {
+        const [base, query = ""] = url.split("?");
+        const params = new URLSearchParams(query);
+        params.set("page", String(page));
+        return `${base}?${params.toString()}`;
+      }
+    },
+    {
+      firstUrl: yotpoPayload.url,
+      firstBody: yotpoPayload.body,
       maxReviews,
     }
   );

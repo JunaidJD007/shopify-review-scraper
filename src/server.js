@@ -70,7 +70,8 @@ app.post("/api/export/csv", async (req, res) => {
 
     const fileName = buildCsvFileName(parsed.data.url);
     const filePath = path.join(downloadsDir, fileName);
-    await writeFile(filePath, reviewsToCsv(parsed.data.reviews), "utf8");
+    const csvContent = "\uFEFF" + reviewsToCsv(parsed.data.reviews);
+    await writeFile(filePath, csvContent, "utf8");
 
     return res.json({
       fileName,
